@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Atomic | Science Problems Marketplace</title>
+    <style>
+        :root { 
+            --primary: #bb86fc; 
+            --bg: #121212; 
+            --card-bg: #1e1e1e; 
+            --text: #e0e0e0; 
+            --border: #333;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+        .card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); margin-bottom: 20px; }
+        .nav-btn { background: none; border: none; color: var(--primary); cursor: pointer; font-weight: bold; margin-left: 15px; }
+        input, textarea, select { background: #2c2c2c; color: white; border: 1px solid #444; padding: 12px; margin: 8px 0; border-radius: 6px; width: 100%; box-sizing: border-box; }
+        button { background: var(--primary); color: #000; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        .section { display: none; }
+        .active { display: block; }
+        .item { border-bottom: 1px solid var(--border); padding: 15px 0; }
+        .tag { background: #333; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 5px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="header">
+        <h1 style="color: var(--primary); margin: 0;">Atomic</h1>
+        <nav>
+            <button class="nav-btn" onclick="showSection('problems')">Problemas</button>
+            <button class="nav-btn" onclick="showSection('profile')">Perfil</button>
+        </nav>
+    </header>
+
+    <div id="problems-section" class="section active">
+        <div class="card">
+            <h2>Reportar Novo Desafio</h2>
+            <input type="text" id="title" placeholder="Título">
+            <textarea id="description" placeholder="Descreva o desafio..."></textarea>
+            <input type="text" id="category" placeholder="Categoria">
+            <select id="difficulty"><option>Fácil</option><option>Médio</option><option>Difícil</option></select>
+            <button onclick="postProblem()">Publicar Problema</button>
+        </div>
+        <div class="card" id="problem-list">Carregando...</div>
+    </div>
+
+    <div id="details-section" class="section">
+        <button onclick="showSection('problems')">← Voltar</button>
+        <div class="card" id="detail-content"></div>
+        <div class="card">
+            <h3>Soluções</h3>
+            <div id="solutions-list"></div>
+            <textarea id="new-sol-content" placeholder="Sua solução..."></textarea>
+            <button onclick="postSolution()">Enviar Solução</button>
+        </div>
+    </div>
+
+    <div id="profile-section" class="section">
+        <div class="card">
+            <h2>Meu Perfil</h2>
+            <input type="text" id="prof-bio" placeholder="Sua Bio">
+            <input type="text" id="prof-pic" placeholder="Link da foto">
+            <p><strong>Reputação:</strong> <span id="prof-rep">0</span></p>
+            <button onclick="updateProfile()">Salvar Perfil</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_BASE = "http://127.0.0.1:8000/api";
+    let currentProbId = null;
+
+    function showSection(id) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById(`${id}-section`).classList.add('active');
+        if(id === 'profile') fetchProfile();
+    }
+
+    async function fetchProblems() {
+        const res = await fetch(`${API_BASE}/problems/`);
+        const data = await res.json();
+        document.getElementById('problem-list').innerHTML = data.map(p => `
+            <div class="item">
+                <h3>${p.title}</h3>
+                <span class="tag">${p.category}</span><span class="tag">${p.difficulty}</span>
+                <br><br><button onclick="openDetails(${p.id})">Ver Soluções</button>
+            </div>
+        `).join('');
+    }
+
+    async function openDetails(id) {
+        currentProbId = id;
+        showSection('details');
+        const [p, sols] = await Promise.all([
+            fetch(`${API_BASE}/problems/${id}/`).then(r => r.json()),
+            fetch(`${API_BASE}/solutions/?problem=${id}`).then(r => r.json())
+        ]);
+        document.getElementById('detail-content').innerHTML = `<h2>${p.title}</h2><p>${p.description}</p>`;
+        document.getElementById('solutions-list').innerHTML = sols.map(s => `
+            <div class="item"><p>${s.content}</p></div>
+        `).join('');
+    }
+
+    async function postProblem() {
+        const payload = {
+            title: document.getElementById('title').value,
+            description: document.getElementById('description').value,
+            category: document.getElementById('category').value,
+            difficulty: document.getElementById('difficulty').value
+        };
+        await fetch(`${API_BASE}/problems/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        fetchProblems();
+    }
+
+    async function postSolution() {
+        const content = document.getElementById('new-sol-content').value;
+        await fetch(`${API_BASE}/solutions/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ problem: currentProbId, content: content })
+        });
+        openDetails(currentProbId);
+    }
+
+    async function fetchProfile() {
+        const res = await fetch(`${API_BASE}/profiles/1/`);
+        const p = await res.json();
+        document.getElementById('prof-bio').value = p.bio || '';
+        document.getElementById('prof-rep').innerText = p.reputation || 0;
+    }
+
+    async function updateProfile() {
+        const data = { bio: document.getElementById('prof-bio').value };
+        await fetch(`${API_BASE}/profiles/1/`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        alert("Perfil atualizado!");
+    }
+
+    fetchProblems();
+</script>
+</body>
+</html>
